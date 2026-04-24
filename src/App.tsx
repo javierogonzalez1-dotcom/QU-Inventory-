@@ -78,6 +78,7 @@ interface Customer {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   history: Array<{
     productId: string;
     amount: number;
@@ -107,8 +108,8 @@ const INITIAL_PROJECTS: Project[] = [
 ];
 
 const INITIAL_CUSTOMERS: Customer[] = [
-  { id: 'c1', name: 'Roofing Soluciones PR', email: 'sales@roofingsolutions.pr', history: [{ productId: '1', amount: 20, timestamp: Date.now() - 86400000 }] },
-  { id: 'c2', name: 'Caribe Contractors', email: 'info@caribecon.com', history: [{ productId: '4', amount: 150, timestamp: Date.now() - 172800000 }] },
+  { id: 'c1', name: 'Roofing Soluciones PR', email: 'sales@roofingsolutions.pr', phone: '(787) 555-0123', history: [{ productId: '1', amount: 20, timestamp: Date.now() - 86400000 }] },
+  { id: 'c2', name: 'Caribe Contractors', email: 'info@caribecon.com', phone: '(787) 555-0456', history: [{ productId: '4', amount: 150, timestamp: Date.now() - 172800000 }] },
 ];
 
 const INITIAL_EMPLOYEES: Employee[] = [
@@ -143,6 +144,23 @@ export default function App() {
     const saved = localStorage.getItem('qu_customers');
     return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
   });
+
+  const handleUpdateCustomer = (updatedCustomer: Customer) => {
+    setCustomers(prev => prev.map(c => c.id === updatedCustomer.id ? updatedCustomer : c));
+    addNotification(`Profile for ${updatedCustomer.name} updated.`);
+  };
+
+  const handleAddCustomer = (name: string, email: string, phone: string) => {
+    const newCustomer: Customer = {
+      id: Math.random().toString(36).substr(2, 9),
+      name,
+      email,
+      phone,
+      history: []
+    };
+    setCustomers(prev => [...prev, newCustomer]);
+    addNotification(`New customer ${name} registered.`);
+  };
   const [employees, setEmployees] = useState<Employee[]>(() => {
     const saved = localStorage.getItem('qu_employees');
     return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES;
@@ -367,7 +385,14 @@ export default function App() {
             {activeTab === 'inventory' && <Inventory products={products} />}
             {activeTab === 'dispatch' && <ProjectDispatch products={products} projects={projects} employees={employees} onDispatch={handleDispatch} />}
             {activeTab === 'returns' && <SurplusReturns dispatches={dispatches} products={products} onReturn={handleReturn} />}
-            {activeTab === 'customers' && <Customers customers={customers} products={products} />}
+            {activeTab === 'customers' && (
+              <Customers 
+                customers={customers} 
+                products={products} 
+                onUpdateCustomer={handleUpdateCustomer}
+                onAddCustomer={handleAddCustomer}
+              />
+            )}
             {activeTab === 'history' && <MovementLog dispatches={dispatches} products={products} />}
             {activeTab === 'management' && (
               <Management 
@@ -892,41 +917,184 @@ function SurplusReturns({ dispatches, products, onReturn }: { dispatches: Dispat
   );
 }
 
-function Customers({ customers, products }: { customers: Customer[], products: Product[] }) {
+function Customers({ 
+  customers, 
+  products, 
+  onUpdateCustomer, 
+  onAddCustomer 
+}: { 
+  customers: Customer[], 
+  products: Product[],
+  onUpdateCustomer: (c: Customer) => void,
+  onAddCustomer: (name: string, email: string, phone: string) => void
+}) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
+
+  const resetForm = () => {
+    setFormData({ name: '', email: '', phone: '' });
+    setIsAdding(false);
+    setEditingId(null);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingId) {
+      const customer = customers.find(c => c.id === editingId);
+      if (customer) {
+        onUpdateCustomer({ ...customer, ...formData });
+      }
+    } else {
+      onAddCustomer(formData.name, formData.email, formData.phone);
+    }
+    resetForm();
+  };
+
+  const startEdit = (c: Customer) => {
+    setEditingId(c.id);
+    setFormData({ name: c.name, email: c.email, phone: c.phone || '' });
+    setIsAdding(true);
+  };
+
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-black uppercase tracking-tighter">Client Registry</h2>
+          <p className="text-white/40 text-sm">Manage corporate and private customer records</p>
+        </div>
+        <button 
+          onClick={() => setIsAdding(!isAdding)}
+          className="px-6 py-3 bg-roofing-green text-black font-black rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-roofing-green/20 hover:scale-105 transition-all"
+        >
+          {isAdding ? 'Cancel' : '+ New Customer Profile'}
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isAdding && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bento-card border-roofing-green/30 bg-roofing-green/5 mb-8">
+              <h3 className="text-lg font-bold mb-6">{editingId ? 'Edit Profile' : 'Register New Client'}</h3>
+              <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-white/40 block ml-1">Entity/Customer Name</label>
+                  <input 
+                    required
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g. San Juan Roofing Co."
+                    className="w-full bg-[#1e1f2e] border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-roofing-green/50 outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-white/40 block ml-1">Contact Email</label>
+                  <input 
+                    required
+                    type="email"
+                    value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="contact@company.com"
+                    className="w-full bg-[#1e1f2e] border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-roofing-green/50 outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-white/40 block ml-1">Phone Number</label>
+                  <input 
+                    required
+                    type="tel"
+                    value={formData.phone}
+                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="(000) 000-0000"
+                    className="w-full bg-[#1e1f2e] border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-roofing-green/50 outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2 lg:col-span-3 flex gap-4">
+                  <button type="submit" className="flex-1 py-4 bg-roofing-green text-black font-bold rounded-xl shadow-lg">
+                    {editingId ? 'Save Profile Changes' : 'Create Customer Record'}
+                  </button>
+                  <button type="button" onClick={resetForm} className="px-8 py-4 bg-white/5 border border-white/10 rounded-xl font-bold">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {customers.map(c => (
-          <div key={c.id} className="glass rounded-3xl p-6 border border-white/5 group hover:border-roofing-green/30 transition-all">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center">
-                <Users size={24} className="text-white/40 group-hover:text-roofing-green transition-colors" />
+          <div key={c.id} className="bento-card group hover:border-white/10 transition-all">
+            <div className="flex items-start justify-between mb-8">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-white/20 group-hover:bg-roofing-green group-hover:text-black transition-all">
+                  <Users size={24} />
+                </div>
+                <div>
+                  <h4 className="text-xl font-bold tracking-tight">{c.name}</h4>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm text-white/30">{c.email}</p>
+                    {c.phone && <p className="text-xs text-roofing-green font-mono">{c.phone}</p>}
+                  </div>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold">{c.name}</h4>
-                <p className="text-xs text-white/40">{c.email}</p>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => startEdit(c)}
+                  className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40 hover:bg-white/10 hover:text-white transition-all shadow-inner"
+                  title="Edit Profile"
+                >
+                  <Plus size={18} className="rotate-45" />
+                </button>
+                <div className="px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
+                  <span className="text-[10px] font-black uppercase text-white/40">ID: {c.id.toUpperCase()}</span>
+                </div>
               </div>
             </div>
-            <div className="space-y-3 pt-4 border-t border-white/5">
-              <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest">Recent Purchases</p>
-              {c.history.slice(0, 2).map((h, i) => {
-                const p = products.find(prod => prod.id === h.productId);
-                return (
-                  <div key={i} className="flex justify-between text-xs">
-                    <span className="text-white/60">{p?.name}</span>
-                    <span className="font-mono font-bold">{h.amount} {p?.unit}s</span>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-end">
+                <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest">Order History Summary</p>
+                <span className={cn(
+                  "px-2 py-1 rounded text-[10px] font-bold uppercase",
+                  c.history.length > 0 ? "bg-roofing-green/10 text-roofing-green" : "bg-orange-500/10 text-orange-400"
+                )}>
+                  {c.history.length > 0 ? `${c.history.length} Movements` : 'New Client'}
+                </span>
+              </div>
+              
+              <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 scrollbar-hide">
+                {c.history.map((h, idx) => {
+                  const p = products.find(prod => prod.id === h.productId);
+                  return (
+                    <div key={idx} className="flex justify-between items-center p-3 bg-white/[0.02] rounded-xl border border-transparent hover:border-white/5 transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className="w-1.5 h-1.5 rounded-full bg-roofing-green" />
+                        <span className="text-xs font-medium text-white/60">{p?.name || 'Unknown Item'}</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold">{h.amount} Units</p>
+                        <p className="text-[9px] text-white/20">{new Date(h.timestamp).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {c.history.length === 0 && (
+                  <div className="py-8 text-center border-2 border-dashed border-white/5 rounded-2xl">
+                    <p className="text-xs text-white/20 italic">No historical data available</p>
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
           </div>
         ))}
-        <button className="glass rounded-3xl p-6 border border-dashed border-white/10 flex flex-col items-center justify-center gap-4 hover:border-roofing-green/50 group transition-all h-full min-h-[220px]">
-          <div className="w-12 h-12 rounded-full border border-dashed border-white/20 flex items-center justify-center group-hover:bg-roofing-green group-hover:border-none transition-all">
-            <Plus size={24} className="text-white/20 group-hover:text-[#0e0f1a]" />
-          </div>
-          <span className="text-sm font-bold text-white/20 group-hover:text-white">Add New Profile</span>
-        </button>
       </div>
     </div>
   );
